@@ -1,5 +1,5 @@
 """
-Suggestion engine for wikilinks and tags.
+Suggestion engine for wikilinks and tags
 
 Provides two layers of tag suggestion:
 1. Retrieval-based: Fast vector similarity to find related notes and extract
@@ -16,12 +16,14 @@ def suggest_links_and_tags(
     index,
     tag_set: set[str],
     docs: list,
+    reranker=None,
     top_k: int = 10,
 ) -> dict:
     """
     Suggest wikilinks and tags using vector retrieval (Layer 1).
 
-    Retrieves similar notes from the index, then extracts suggestions from:
+    Retrieves similar notes from the index, optionally reranks them,
+    then extracts suggestions from:
     - Direct retrieval: Notes semantically similar to the input text
     - Graph expansion: Wikilinks and backlinks from retrieved notes
 
@@ -30,13 +32,14 @@ def suggest_links_and_tags(
         index: The VectorStoreIndex to query.
         tag_set: Set of valid tag names from the vault's tags folder.
         docs: Original documents from ObsidianReader (for complete metadata).
-        top_k: Number of similar notes to retrieve.
+        reranker: Optional SentenceTransformerRerank for better ranking.
+        top_k: Number of candidates to retrieve (reranker reduces this further).
 
     Returns:
         Dict with 'suggested_links' and 'suggested_tags' lists.
     """
     # Build lookup from note_name -> full doc metadata
-    # Merge wikilinks/backlinks from ALL chunks of the same note
+    # Merge wikilinks/backlinks from all chunks of the same note
     doc_metadata = {}
     for doc in docs:
         name = doc.metadata.get("note_name", "")
@@ -53,6 +56,10 @@ def suggest_links_and_tags(
 
     retriever = index.as_retriever(similarity_top_k=top_k)
     results = retriever.retrieve(text)
+
+    # Rerank if available (cross-encoder for better semantic matching)
+    if reranker:
+        results = reranker.postprocess_nodes(results, query_str=text)
 
     # Deduplicate by note name, keep best score
     # Use ORIGINAL doc metadata for wikilinks/backlinks
@@ -113,7 +120,7 @@ def suggest_tags_via_llm(
     max_tags: int = 6,
 ) -> dict:
     """
-    Use an LLM to select the best tags (Layer 2 fallback).
+    Use an LLM to select the best tags (Layer 2 fallback)
 
     Called when retrieval returns too few tags or low confidence scores.
     Uses GPT to intelligently select from all available tags and can

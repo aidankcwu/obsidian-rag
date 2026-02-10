@@ -1,5 +1,6 @@
 # Obsidian RAG artifacts
 .obsrag/
+gcp-key.json
 
 # Python
 __pycache__/

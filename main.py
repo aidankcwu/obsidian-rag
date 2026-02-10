@@ -1,8 +1,9 @@
 """Entry point for the Obsidian RAG system."""
-from config import VAULT_PATH, PERSIST_DIR, TOP_K, EMBEDDING_MODEL
+from config import VAULT_PATH, PERSIST_DIR, EMBEDDING_MODEL
 from indexer import load_documents, build_or_load_index
 from tags import load_tag_set
 from suggest import suggest_links_and_tags, suggest_tags_via_llm
+from llama_index.core.postprocessor import SentenceTransformerRerank
 
 # Thresholds for LLM fallback
 MIN_TAGS_THRESHOLD = 3
@@ -15,11 +16,24 @@ def main():
     index = build_or_load_index(docs, PERSIST_DIR, EMBEDDING_MODEL)
     tag_set = load_tag_set(VAULT_PATH)
 
+    # Initialize reranker once (loads model into memory)
+    reranker = SentenceTransformerRerank(
+        model="cross-encoder/ms-marco-MiniLM-L-6-v2",
+        top_n=5,
+    )
+
     # Test query
     test_query = "convolutional neural networks"
 
-    # Layer 1: Retrieval-based suggestions
-    result = suggest_links_and_tags(test_query, index, tag_set, docs, top_k=TOP_K)
+    # Layer 1: Retrieval-based suggestions (retrieve 10, rerank to 5)
+    result = suggest_links_and_tags(
+        test_query,
+        index,
+        tag_set,
+        docs,
+        reranker=reranker,
+        top_k=10,
+    )
     retrieval_tags = [t["title"] for t in result["suggested_tags"]]
 
     # Check confidence: best retrieval score
