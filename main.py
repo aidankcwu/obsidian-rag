@@ -1,33 +1,44 @@
 """Entry point for the Obsidian RAG system."""
+from pathlib import Path
 from config import VAULT_PATH, PERSIST_DIR, EMBEDDING_MODEL
 from indexer import load_documents, build_or_load_index
 from tags import load_tag_set
 from suggest import suggest_links_and_tags, suggest_tags_via_llm
+from ocr import ocr_pdf
 from llama_index.core.postprocessor import SentenceTransformerRerank
 
-# Thresholds for LLM fallback
+# thresholds for LLM fallback
 MIN_TAGS_THRESHOLD = 3
 MIN_CONFIDENCE_THRESHOLD = 0.4
 
 
 def main():
-    # Setup
+    # setup
     docs = load_documents(VAULT_PATH)
     index = build_or_load_index(docs, PERSIST_DIR, EMBEDDING_MODEL)
     tag_set = load_tag_set(VAULT_PATH)
 
-    # Initialize reranker once (loads model into memory)
+    # initialize reranker
     reranker = SentenceTransformerRerank(
         model="cross-encoder/ms-marco-MiniLM-L-6-v2",
         top_n=5,
     )
 
-    # Test query
-    test_query = "convolutional neural networks"
+    # option 1 - ocr from pdf
+    pdf_path = Path("test_note.pdf")
+    if pdf_path.exists():
+        print(f"Processing PDF: {pdf_path}")
+        input_text = ocr_pdf(pdf_path)
+        print(f"\n--- OCR Output ---\n{input_text[:500]}...\n")
+        input_source = f"OCR'd note: {pdf_path.name}"
+    else:
+        # Option 2: Test query (fallback if no PDF)
+        input_text = "convolutional neural networks"
+        input_source = f"Query: '{input_text}'"
 
-    # Layer 1: Retrieval-based suggestions (retrieve 10, rerank to 5)
+    # Retrieval-based suggestions (retrieve 10, rerank to 5)
     result = suggest_links_and_tags(
-        test_query,
+        input_text,
         index,
         tag_set,
         docs,
@@ -36,22 +47,22 @@ def main():
     )
     retrieval_tags = [t["title"] for t in result["suggested_tags"]]
 
-    # Check confidence: best retrieval score
+    # check confidence: best retrieval score
     top_score = result["suggested_links"][0]["score"] if result["suggested_links"] else 0
 
-    # Layer 2: LLM fallback if not enough tags OR low retrieval confidence
+    # LLM fallback if not enough tags or low retrieval confidence
     if len(retrieval_tags) < MIN_TAGS_THRESHOLD or top_score < MIN_CONFIDENCE_THRESHOLD:
         print(f"[LLM fallback triggered: {len(retrieval_tags)} tags, top_score={top_score:.2f}]")
         llm_result = suggest_tags_via_llm(
-            note_text=test_query,
+            note_text=input_text,
             all_tags=sorted(tag_set),
             retrieval_tags=retrieval_tags,
         )
         result["llm_tags"] = llm_result
 
-    # Display results
+    # display results
     print(f"\n{'='*50}")
-    print(f"Query: '{test_query}'")
+    print(f"Suggestions for: {input_source}")
     print(f"{'='*50}")
 
     print("\nSuggested wikilinks:")

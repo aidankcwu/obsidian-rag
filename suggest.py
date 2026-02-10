@@ -60,6 +60,8 @@ def suggest_links_and_tags(
     # Rerank if available (cross-encoder for better semantic matching)
     if reranker:
         results = reranker.postprocess_nodes(results, query_str=text)
+        # Filter out low-confidence results
+        results = [r for r in results if r.score > 0]
 
     # Deduplicate by note name, keep best score
     # Use ORIGINAL doc metadata for wikilinks/backlinks
