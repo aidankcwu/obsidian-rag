@@ -1,4 +1,14 @@
-"""RAG-based suggestion engine for wikilinks and tags."""
+"""
+Suggestion engine for wikilinks and tags.
+
+Provides two layers of tag suggestion:
+1. Retrieval-based: Fast vector similarity to find related notes and extract
+   tags from their metadata and graph connections.
+2. LLM fallback: When retrieval returns too few tags or low confidence scores,
+   uses GPT to intelligently select from all available tags.
+"""
+import json
+import openai
 
 
 def suggest_links_and_tags(
@@ -9,13 +19,21 @@ def suggest_links_and_tags(
     top_k: int = 10,
 ) -> dict:
     """
-    Given input text, retrieve similar notes and return
-    suggested wikilinks and tags, separated by type.
+    Suggest wikilinks and tags using vector retrieval (Layer 1).
 
-    Tags are identified by checking if a note name exists
-    in the vault's '3 - Tags' folder.
+    Retrieves similar notes from the index, then extracts suggestions from:
+    - Direct retrieval: Notes semantically similar to the input text
+    - Graph expansion: Wikilinks and backlinks from retrieved notes
 
-    Uses original doc metadata for wikilinks (not chunk metadata).
+    Args:
+        text: The input text to find suggestions for.
+        index: The VectorStoreIndex to query.
+        tag_set: Set of valid tag names from the vault's tags folder.
+        docs: Original documents from ObsidianReader (for complete metadata).
+        top_k: Number of similar notes to retrieve.
+
+    Returns:
+        Dict with 'suggested_links' and 'suggested_tags' lists.
     """
     # Build lookup from note_name -> full doc metadata
     # Merge wikilinks/backlinks from ALL chunks of the same note
@@ -51,7 +69,7 @@ def suggest_links_and_tags(
                 "backlinks": orig.get("backlinks", []),
             }
 
-    # Collect secondary links from graph
+    # Collect secondary links from graph (wikilinks and backlinks of retrieved notes)
     secondary_names = set()
     for info in seen.values():
         for wl in info["wikilinks"]:
@@ -60,13 +78,17 @@ def suggest_links_and_tags(
             secondary_names.add(bl)
     secondary_names -= set(seen.keys())
 
-    # Split into tags vs notes
+    # Split into tags vs notes based on whether the name is in tag_set
     suggested_tags = []
     suggested_links = []
 
     for info in sorted(seen.values(), key=lambda x: x["score"], reverse=True):
         if info["title"] in tag_set:
-            suggested_tags.append({"title": info["title"], "score": info["score"], "source": "retrieval"})
+            suggested_tags.append({
+                "title": info["title"],
+                "score": info["score"],
+                "source": "retrieval",
+            })
         else:
             suggested_links.append(info)
 
@@ -81,3 +103,64 @@ def suggest_links_and_tags(
         "suggested_links": suggested_links,
         "suggested_tags": suggested_tags,
     }
+
+
+def suggest_tags_via_llm(
+    note_text: str,
+    all_tags: list[str],
+    retrieval_tags: list[str],
+    min_tags: int = 3,
+    max_tags: int = 6,
+) -> dict:
+    """
+    Use an LLM to select the best tags (Layer 2 fallback).
+
+    Called when retrieval returns too few tags or low confidence scores.
+    Uses GPT to intelligently select from all available tags and can
+    propose new tags if no existing tag covers a key concept.
+
+    Args:
+        note_text: The content of the note to tag.
+        all_tags: List of all available tags in the vault.
+        retrieval_tags: Tags already suggested by retrieval (for context).
+        min_tags: Minimum number of tags to suggest.
+        max_tags: Maximum number of tags to suggest.
+
+    Returns:
+        Dict with 'existing_tags', 'new_tags', and 'reasoning' keys.
+    """
+    prompt = f"""You are a tagging system for a personal knowledge base.
+
+Given the following note content and a list of all available tags,
+select the most relevant tags for this note.
+
+Note content:
+{note_text[:3000]}
+
+Available tags:
+{json.dumps(sorted(all_tags))}
+
+Tags already suggested by retrieval (may or may not be correct):
+{json.dumps(retrieval_tags)}
+
+Rules:
+- Select {min_tags} to {max_tags} tags total.
+- Choose from the available tags list whenever possible.
+- Only propose a NEW tag if no existing tag covers the concept.
+- New tags must use lowercase-with-hyphens format.
+- Return valid JSON only, no other text.
+
+Return format:
+{{
+    "existing_tags": ["tag1", "tag2"],
+    "new_tags": ["tag3"],
+    "reasoning": "brief explanation of choices"
+}}"""
+
+    response = openai.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0,
+    )
+
+    return json.loads(response.choices[0].message.content)
