@@ -5,6 +5,7 @@ def suggest_links_and_tags(
     text: str,
     index,
     tag_set: set[str],
+    docs: list,
     top_k: int = 10,
 ) -> dict:
     """
@@ -12,30 +13,45 @@ def suggest_links_and_tags(
     suggested wikilinks and tags, separated by type.
 
     Tags are identified by checking if a note name exists
-    in the vault's '3 - Tags' folder
+    in the vault's '3 - Tags' folder.
+
+    Uses original doc metadata for wikilinks (not chunk metadata).
     """
+    # Build lookup from note_name -> full doc metadata
+    # Merge wikilinks/backlinks from ALL chunks of the same note
+    doc_metadata = {}
+    for doc in docs:
+        name = doc.metadata.get("note_name", "")
+        if name:
+            if name not in doc_metadata:
+                doc_metadata[name] = {"wikilinks": set(), "backlinks": set()}
+            doc_metadata[name]["wikilinks"].update(doc.metadata.get("wikilinks", []))
+            doc_metadata[name]["backlinks"].update(doc.metadata.get("backlinks", []))
+
+    # Convert sets back to lists
+    for name in doc_metadata:
+        doc_metadata[name]["wikilinks"] = list(doc_metadata[name]["wikilinks"])
+        doc_metadata[name]["backlinks"] = list(doc_metadata[name]["backlinks"])
+
     retriever = index.as_retriever(similarity_top_k=top_k)
     results = retriever.retrieve(text)
 
-    # Debug: check what metadata the retrieved nodes have
-    print("\n[DEBUG] Retrieved node metadata:")
-    for i, node in enumerate(results[:3]):
-        print(f"  Node {i}: {node.metadata}")
-
     # Deduplicate by note name, keep best score
+    # Use ORIGINAL doc metadata for wikilinks/backlinks
     seen = {}
     for node in results:
         name = node.metadata.get("note_name", "")
         if name and (name not in seen or node.score > seen[name]["score"]):
+            orig = doc_metadata.get(name, {})
             seen[name] = {
                 "title": name,
                 "score": round(node.score, 4),
                 "folder": node.metadata.get("folder_name", ""),
-                "wikilinks": node.metadata.get("wikilinks", []),
-                "backlinks": node.metadata.get("backlinks", []),
+                "wikilinks": orig.get("wikilinks", []),
+                "backlinks": orig.get("backlinks", []),
             }
 
-    #Collect secondary links from graph
+    # Collect secondary links from graph
     secondary_names = set()
     for info in seen.values():
         for wl in info["wikilinks"]:

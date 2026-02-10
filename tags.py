@@ -1,4 +1,4 @@
-"""Load tag set from the Obsidian vault."""
+"""Load tag set from the Obsidian vault"""
 from pathlib import Path
 
 
