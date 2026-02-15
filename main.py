@@ -4,7 +4,9 @@ from config import VAULT_PATH, PERSIST_DIR, EMBEDDING_MODEL
 from indexer import load_documents, build_or_load_index
 from tags import load_tag_set
 from suggest import suggest_links_and_tags, suggest_tags_via_llm
-from ocr import ocr_pdf
+from ocr import ocr_pdf_structured
+from formatter import regions_to_raw_markdown, format_with_llm
+from write_to_obsidian import write_note
 from llama_index.core.postprocessor import SentenceTransformerRerank
 
 # thresholds for LLM fallback
@@ -24,12 +26,22 @@ def main():
         top_n=5,
     )
 
-    # option 1 - ocr from pdf
+    # option 1 - structured ocr from pdf (with math/LaTeX detection)
     pdf_path = Path("test_note.pdf")
     if pdf_path.exists():
         print(f"Processing PDF: {pdf_path}")
-        input_text = ocr_pdf(pdf_path)
-        print(f"\n--- OCR Output ---\n{input_text[:500]}...\n")
+        all_pages = ocr_pdf_structured(pdf_path)
+
+        # Flatten all page regions and convert to raw markdown
+        all_regions = [region for page in all_pages for region in page]
+        raw_markdown = regions_to_raw_markdown(all_regions)
+        print(f"\n--- Raw OCR ---\n{raw_markdown[:500]}...\n")
+
+        # Clean up with LLM
+        print("Formatting with LLM...")
+        input_text = format_with_llm(raw_markdown)
+        print(f"\n--- Formatted ---\n{input_text[:500]}...\n")
+
         input_source = f"OCR'd note: {pdf_path.name}"
     else:
         # Option 2: Test query (fallback if no PDF)
@@ -82,6 +94,27 @@ def main():
         print(f"  Existing: {result['llm_tags'].get('existing_tags', [])}")
         print(f"  New: {result['llm_tags'].get('new_tags', [])}")
         print(f"  Reasoning: {result['llm_tags'].get('reasoning', '')}")
+
+    # --- Write to Obsidian ---
+    # Collect final tags (prefer LLM if available, otherwise retrieval)
+    if "llm_tags" in result:
+        final_tags = result["llm_tags"].get("existing_tags", []) + result["llm_tags"].get("new_tags", [])
+    else:
+        final_tags = retrieval_tags
+
+    # Collect wikilinks as references
+    references = [link["title"] for link in result["suggested_links"] if link.get("source") == "retrieval"]
+
+    # Derive title from PDF filename
+    title = pdf_path.stem.replace("_", " ").replace("-", " ").title()
+
+    note_path = write_note(
+        title=title,
+        content=input_text,
+        tags=final_tags,
+        references=references,
+    )
+    print(f"\nNote saved to: {note_path}")
 
 
 if __name__ == "__main__":
