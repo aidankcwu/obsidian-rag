@@ -17,3 +17,8 @@ TOP_K = 5
 
 # Embedding model to use (OpenAI)
 EMBEDDING_MODEL = "text-embedding-3-small"
+
+# Watch folder for new PDFs from GoodNotes
+WATCH_FOLDER = Path(
+    "/Users/aidanwu/Library/CloudStorage/GoogleDrive-samuraishibe1@gmail.com/My Drive/[0] Notes Inbox"
+)
