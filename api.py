@@ -10,7 +10,7 @@ from pathlib import Path
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from pydantic import BaseModel
 
-from config import VAULT_PATH, PERSIST_DIR, EMBEDDING_MODEL
+from config import get_config
 from indexer import load_documents, build_or_load_index
 from tags import load_tag_set, build_tag_context
 from suggest import suggest_links_and_tags, suggest_tags_via_llm
@@ -18,13 +18,10 @@ from ocr import ocr_pdf_with_llm
 from write_to_obsidian import write_note
 from llama_index.core.postprocessor import SentenceTransformerRerank
 
-# Thresholds for LLM fallback
-MIN_TAGS_THRESHOLD = 3
-MIN_CONFIDENCE_THRESHOLD = 0.4
-
 app = FastAPI(title="Obsidian RAG API", version="1.0.0")
 
 # Shared resources initialized at startup
+cfg = None
 docs = None
 index = None
 tag_set = None
@@ -62,15 +59,24 @@ class HealthResponse(BaseModel):
 @app.on_event("startup")
 def startup():
     """Initialize all shared resources once at startup."""
-    global docs, index, tag_set, tag_context, reranker
+    global cfg, docs, index, tag_set, tag_context, reranker
+    cfg = get_config()
     print("Initializing Obsidian RAG pipeline...")
-    docs = load_documents(VAULT_PATH)
-    index = build_or_load_index(docs, PERSIST_DIR, EMBEDDING_MODEL)
-    tag_set = load_tag_set(VAULT_PATH)
+    docs = load_documents(cfg.vault_path)
+    index = build_or_load_index(
+        docs, cfg.persist_dir, cfg.embedding.model,
+        chunk_size=cfg.embedding.chunk_size,
+        chunk_overlap=cfg.embedding.chunk_overlap,
+    )
+    tag_set = load_tag_set(
+        cfg.vault_path,
+        style=cfg.tags.style,
+        tags_folder_name=cfg.folders.tags,
+    )
     tag_context = build_tag_context(docs, tag_set)
     reranker = SentenceTransformerRerank(
-        model="cross-encoder/ms-marco-MiniLM-L-6-v2",
-        top_n=5,
+        model=cfg.rag.reranker_model,
+        top_n=cfg.rag.reranker_top_n,
     )
     print(f"Ready. {len(docs)} docs, {len(tag_set)} tags loaded, {len(tag_context)} tags with context.")
 
@@ -82,7 +88,7 @@ def health():
         status="ok" if index is not None else "not_ready",
         index_loaded=index is not None,
         num_tags=len(tag_set) if tag_set else 0,
-        vault_path=str(VAULT_PATH),
+        vault_path=str(cfg.vault_path) if cfg else "",
     )
 
 
@@ -109,7 +115,7 @@ def suggest(req: SuggestRequest):
     top_score = result["suggested_links"][0]["score"] if result["suggested_links"] else 0
 
     llm_tags = None
-    if len(retrieval_tags) < MIN_TAGS_THRESHOLD or top_score < MIN_CONFIDENCE_THRESHOLD:
+    if len(retrieval_tags) < cfg.rag.min_tags_threshold or top_score < cfg.rag.min_confidence_threshold:
         llm_tags = suggest_tags_via_llm(
             note_text=req.text,
             all_tags=sorted(tag_set),
@@ -142,19 +148,19 @@ async def process(file: UploadFile = File(...)):
             f.write(content)
 
         # OCR
-        input_text = ocr_pdf_with_llm(tmp_path)
+        input_text = ocr_pdf_with_llm(tmp_path, model=cfg.ocr.model)
 
         # Layer 1: Retrieval-based suggestions
         result = suggest_links_and_tags(
             input_text, index, tag_set, docs,
-            reranker=reranker, top_k=10,
+            reranker=reranker, top_k=cfg.rag.top_k,
         )
         retrieval_tags = [t["title"] for t in result["suggested_tags"]]
         top_score = result["suggested_links"][0]["score"] if result["suggested_links"] else 0
 
         # Layer 2: LLM fallback
         llm_tags = None
-        if len(retrieval_tags) < MIN_TAGS_THRESHOLD or top_score < MIN_CONFIDENCE_THRESHOLD:
+        if len(retrieval_tags) < cfg.rag.min_tags_threshold or top_score < cfg.rag.min_confidence_threshold:
             llm_tags = suggest_tags_via_llm(
                 note_text=input_text,
                 all_tags=sorted(tag_set),
@@ -178,6 +184,9 @@ async def process(file: UploadFile = File(...)):
             content=input_text,
             tags=final_tags,
             references=references,
+            inbox_path=cfg.inbox_path,
+            tag_style=cfg.tags.style,
+            template=cfg.note_template,
         )
 
         return ProcessResponse(

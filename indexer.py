@@ -18,10 +18,12 @@ def build_or_load_index(
     docs,
     persist_dir: Path,
     embedding_model: str,
+    chunk_size: int = 512,
+    chunk_overlap: int = 50,
 ) -> VectorStoreIndex:
     """
     Build a new index from documents, or load from disk if it already exists.
-    Uses chunking with 50 token overlap for better context.
+    Uses chunking with configurable overlap for better context.
     """
     embed_model = OpenAIEmbedding(model=embedding_model)
 
@@ -32,10 +34,9 @@ def build_or_load_index(
     else:
         print("Building index, using openai")
 
-        # Custom chunking with overlap for better context
         parser = SentenceSplitter(
-            chunk_size=512,
-            chunk_overlap=50,
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
         )
 
         index = VectorStoreIndex.from_documents(

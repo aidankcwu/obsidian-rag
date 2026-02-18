@@ -132,9 +132,9 @@ def ocr_pdf_structured(pdf_path: Path) -> list[list[dict]]:
 
 # --- LLM Vision pipeline ---
 
-def ocr_page_with_llm(page_image: Image.Image) -> str:
+def ocr_page_with_llm(page_image: Image.Image, model: str = "gpt-4o-mini") -> str:
     """
-    Send a page image to GPT-4o-mini's vision API and get back
+    Send a page image to an LLM vision API and get back
     clean Markdown with LaTeX math and diagram placeholders.
     """
     # Convert PIL image to base64
@@ -143,7 +143,7 @@ def ocr_page_with_llm(page_image: Image.Image) -> str:
     b64_image = base64.b64encode(buffer.getvalue()).decode("utf-8")
 
     response = openai.chat.completions.create(
-        model="gpt-4o-mini",
+        model=model,
         messages=[{
             "role": "user",
             "content": [
@@ -198,14 +198,14 @@ Rules:
     return result
 
 
-def ocr_pdf_with_llm(pdf_path: Path) -> str:
-    """LLM vision pipeline: PDF → images → clean Markdown via GPT-4o-mini."""
+def ocr_pdf_with_llm(pdf_path: Path, model: str = "gpt-4o-mini") -> str:
+    """LLM vision pipeline: PDF → images → clean Markdown via LLM vision API."""
     images = pdf_to_images(pdf_path)
 
     all_text = []
     for i, image in enumerate(images):
         print(f"OCR (LLM vision) page {i + 1}/{len(images)}...")
-        text = ocr_page_with_llm(image)
+        text = ocr_page_with_llm(image, model=model)
         all_text.append(text)
 
     combined = "\n\n".join(all_text)

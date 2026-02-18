@@ -2,10 +2,8 @@
 import json
 import time
 from pathlib import Path
-from config import WATCH_FOLDER
 
 PROCESSED_LOG = Path(".obsrag/processed.json")
-POLL_INTERVAL = 30  # seconds
 
 
 def load_processed() -> set[str]:
@@ -21,33 +19,34 @@ def save_processed(processed: set[str]):
     PROCESSED_LOG.write_text(json.dumps(sorted(processed), indent=2))
 
 
-def get_new_pdfs(processed: set[str]) -> list[Path]:
-    """Return any PDFs in WATCH_FOLDER that haven't been processed yet."""
-    if not WATCH_FOLDER.exists():
-        print(f"Warning: Watch folder not found at {WATCH_FOLDER}")
+def get_new_pdfs(watch_folder: Path, processed: set[str]) -> list[Path]:
+    """Return any PDFs in watch_folder that haven't been processed yet."""
+    if not watch_folder.exists():
+        print(f"Warning: Watch folder not found at {watch_folder}")
         return []
     return [
-        f for f in WATCH_FOLDER.glob("*.pdf")
+        f for f in watch_folder.glob("*.pdf")
         if f.name not in processed
     ]
 
 
-def watch_loop(process_fn):
+def watch_loop(process_fn, watch_folder: Path, poll_interval: int = 30):
     """
-    Poll WATCH_FOLDER for new PDFs and run process_fn on each.
+    Poll watch_folder for new PDFs and run process_fn on each.
 
     Args:
         process_fn: Callable that takes a Path to a PDF and processes it.
-                    Should be the fully initialized pipeline function.
+        watch_folder: Folder to watch for new PDFs.
+        poll_interval: Seconds between polls.
     """
     processed = load_processed()
-    print(f"Watching {WATCH_FOLDER} for new PDFs (every {POLL_INTERVAL}s)...")
+    print(f"Watching {watch_folder} for new PDFs (every {poll_interval}s)...")
     print(f"Already processed: {len(processed)} files")
     print("Press Ctrl+C to stop.\n")
 
     try:
         while True:
-            new_pdfs = get_new_pdfs(processed)
+            new_pdfs = get_new_pdfs(watch_folder, processed)
 
             for pdf_path in new_pdfs:
                 print(f"\n{'='*50}")
@@ -62,6 +61,6 @@ def watch_loop(process_fn):
                 except Exception as e:
                     print(f"Error processing {pdf_path.name}: {e}")
 
-            time.sleep(POLL_INTERVAL)
+            time.sleep(poll_interval)
     except KeyboardInterrupt:
         print("\nWatcher stopped.")

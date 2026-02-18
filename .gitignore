@@ -1,6 +1,8 @@
 # Obsidian RAG artifacts
 .obsrag/
+.obsrag.yaml
 gcp-key.json
+.obsrag.yaml.backup
 
 # Python
 __pycache__/

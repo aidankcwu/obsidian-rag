@@ -1,0 +1,59 @@
+# Obsidian RAG Configuration
+# Copy this file to .obsrag.yaml and edit to match your setup.
+# Only vault_path is required — everything else has sensible defaults.
+
+# Path to your Obsidian vault (required)
+vault_path: ~/path/to/your/vault
+
+# Folder names within the vault
+folders:
+  inbox: "1 - Inbox"         # Where new notes are written
+  tags: "3 - Tags"           # Folder containing tag .md files (wikilink style)
+  # attachments: "Attachments"  # (reserved for future use)
+
+# Folder to watch for new PDFs (e.g. GoodNotes export folder)
+watch_folder: ~/path/to/watch/folder
+
+# Tag configuration
+tags:
+  style: wikilink   # "wikilink" = tags are .md files in the tags folder
+                     # "hashtag"  = tags are #hashtags found across all notes
+
+# Note template for generated notes
+# Available placeholders: {date}, {time}, {title}, {content}, {tags}, {references}
+note_template: |
+  {date} {time}
+
+  Status: #review
+
+  Tags: {tags}
+
+  # {title}
+
+  {content}
+
+  ## References
+  {references}
+
+# OCR settings
+ocr:
+  provider: openai_vision   # "openai_vision" or "google_vision"
+  model: gpt-4o-mini        # Model for vision-based OCR
+
+# Embedding and chunking settings
+embedding:
+  model: text-embedding-3-small
+  chunk_size: 512
+  chunk_overlap: 50
+
+# RAG pipeline settings
+rag:
+  top_k: 10                                              # Candidates to retrieve before reranking
+  reranker_model: cross-encoder/ms-marco-MiniLM-L-6-v2   # Cross-encoder model for reranking
+  reranker_top_n: 5                                       # Results to keep after reranking
+  min_tags_threshold: 3       # Minimum retrieval tags before LLM fallback triggers
+  min_confidence_threshold: 0.4  # Minimum top score before LLM fallback triggers
+
+# Watcher settings
+watcher:
+  poll_interval: 30   # Seconds between polling for new PDFs
