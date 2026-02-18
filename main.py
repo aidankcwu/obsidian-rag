@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 from config import VAULT_PATH, PERSIST_DIR, EMBEDDING_MODEL
 from indexer import load_documents, build_or_load_index
-from tags import load_tag_set
+from tags import load_tag_set, build_tag_context
 from suggest import suggest_links_and_tags, suggest_tags_via_llm
 from ocr import ocr_pdf_with_llm
 from write_to_obsidian import write_note
@@ -25,14 +25,15 @@ def setup():
     docs = load_documents(VAULT_PATH)
     index = build_or_load_index(docs, PERSIST_DIR, EMBEDDING_MODEL)
     tag_set = load_tag_set(VAULT_PATH)
+    tag_context = build_tag_context(docs, tag_set)
     reranker = SentenceTransformerRerank(
         model="cross-encoder/ms-marco-MiniLM-L-6-v2",
         top_n=5,
     )
-    return docs, index, tag_set, reranker
+    return docs, index, tag_set, tag_context, reranker
 
 
-def process_pdf(pdf_path: Path, docs, index, tag_set, reranker):
+def process_pdf(pdf_path: Path, docs, index, tag_set, tag_context, reranker):
     """Run the full pipeline on a single PDF."""
     # OCR
     print(f"Processing PDF: {pdf_path}")
@@ -60,6 +61,8 @@ def process_pdf(pdf_path: Path, docs, index, tag_set, reranker):
             note_text=input_text,
             all_tags=sorted(tag_set),
             retrieval_tags=retrieval_tags,
+            filename=pdf_path.name,
+            tag_context=tag_context,
         )
         result["llm_tags"] = llm_result
 
@@ -108,18 +111,18 @@ def main():
         sys.exit(1)
 
     # Initialize once
-    docs, index, tag_set, reranker = setup()
+    docs, index, tag_set, tag_context, reranker = setup()
 
     if sys.argv[1] == "--watch":
         # Watch mode: poll for new PDFs
-        watch_loop(lambda pdf: process_pdf(pdf, docs, index, tag_set, reranker))
+        watch_loop(lambda pdf: process_pdf(pdf, docs, index, tag_set, tag_context, reranker))
     else:
         # Single PDF mode
         pdf_path = Path(sys.argv[1])
         if not pdf_path.exists():
             print(f"Error: {pdf_path} not found")
             sys.exit(1)
-        process_pdf(pdf_path, docs, index, tag_set, reranker)
+        process_pdf(pdf_path, docs, index, tag_set, tag_context, reranker)
 
 
 if __name__ == "__main__":

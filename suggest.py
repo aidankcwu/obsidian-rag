@@ -118,6 +118,8 @@ def suggest_tags_via_llm(
     note_text: str,
     all_tags: list[str],
     retrieval_tags: list[str],
+    filename: str = "",
+    tag_context: dict[str, list[str]] | None = None,
     min_tags: int = 3,
     max_tags: int = 6,
 ) -> dict:
@@ -132,22 +134,40 @@ def suggest_tags_via_llm(
         note_text: The content of the note to tag.
         all_tags: List of all available tags in the vault.
         retrieval_tags: Tags already suggested by retrieval (for context).
+        filename: Original PDF filename (helps identify course context).
+        tag_context: Dict mapping tag name -> list of note titles using it.
         min_tags: Minimum number of tags to suggest.
         max_tags: Maximum number of tags to suggest.
 
     Returns:
         Dict with 'existing_tags', 'new_tags', and 'reasoning' keys.
     """
+    # Build tag context string showing what notes use each tag
+    if tag_context:
+        tag_info_lines = []
+        for tag in sorted(all_tags):
+            notes = tag_context.get(tag, [])
+            if notes:
+                sample = notes[:5]
+                suffix = f" (+{len(notes) - 5} more)" if len(notes) > 5 else ""
+                tag_info_lines.append(f"  {tag}: used by {', '.join(sample)}{suffix}")
+            else:
+                tag_info_lines.append(f"  {tag}: (unused)")
+        tag_section = "Available tags (with notes that use them):\n" + "\n".join(tag_info_lines)
+    else:
+        tag_section = f"Available tags:\n{json.dumps(sorted(all_tags))}"
+
+    filename_section = f"\nSource filename: {filename}\n" if filename else ""
+
     prompt = f"""You are a tagging system for a personal knowledge base.
 
 Given the following note content and a list of all available tags,
 select the most relevant tags for this note.
-
+{filename_section}
 Note content:
 {note_text[:3000]}
 
-Available tags:
-{json.dumps(sorted(all_tags))}
+{tag_section}
 
 Tags already suggested by retrieval (may or may not be correct):
 {json.dumps(retrieval_tags)}
@@ -157,6 +177,7 @@ Rules:
 - Choose from the available tags list whenever possible.
 - Only propose a NEW tag if no existing tag covers the concept.
 - New tags must use lowercase-with-hyphens format.
+- Course-code tags (e.g. comp182, math212) should be assigned based on organizational context — especially the source filename — rather than content similarity. A note should typically have only ONE course tag.
 - Return valid JSON only, no other text.
 
 Return format:

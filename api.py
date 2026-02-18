@@ -12,7 +12,7 @@ from pydantic import BaseModel
 
 from config import VAULT_PATH, PERSIST_DIR, EMBEDDING_MODEL
 from indexer import load_documents, build_or_load_index
-from tags import load_tag_set
+from tags import load_tag_set, build_tag_context
 from suggest import suggest_links_and_tags, suggest_tags_via_llm
 from ocr import ocr_pdf_with_llm
 from write_to_obsidian import write_note
@@ -28,6 +28,7 @@ app = FastAPI(title="Obsidian RAG API", version="1.0.0")
 docs = None
 index = None
 tag_set = None
+tag_context = None
 reranker = None
 
 
@@ -61,16 +62,17 @@ class HealthResponse(BaseModel):
 @app.on_event("startup")
 def startup():
     """Initialize all shared resources once at startup."""
-    global docs, index, tag_set, reranker
+    global docs, index, tag_set, tag_context, reranker
     print("Initializing Obsidian RAG pipeline...")
     docs = load_documents(VAULT_PATH)
     index = build_or_load_index(docs, PERSIST_DIR, EMBEDDING_MODEL)
     tag_set = load_tag_set(VAULT_PATH)
+    tag_context = build_tag_context(docs, tag_set)
     reranker = SentenceTransformerRerank(
         model="cross-encoder/ms-marco-MiniLM-L-6-v2",
         top_n=5,
     )
-    print(f"Ready. {len(docs)} docs, {len(tag_set)} tags loaded.")
+    print(f"Ready. {len(docs)} docs, {len(tag_set)} tags loaded, {len(tag_context)} tags with context.")
 
 
 @app.get("/health", response_model=HealthResponse)
@@ -112,6 +114,7 @@ def suggest(req: SuggestRequest):
             note_text=req.text,
             all_tags=sorted(tag_set),
             retrieval_tags=retrieval_tags,
+            tag_context=tag_context,
         )
 
     return SuggestResponse(
@@ -156,6 +159,8 @@ async def process(file: UploadFile = File(...)):
                 note_text=input_text,
                 all_tags=sorted(tag_set),
                 retrieval_tags=retrieval_tags,
+                filename=file.filename,
+                tag_context=tag_context,
             )
 
         # Determine final tags
