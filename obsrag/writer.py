@@ -46,7 +46,7 @@ def write_note(
 
     # Use default template if none provided
     if template is None:
-        from config import get_config, DEFAULT_NOTE_TEMPLATE
+        from obsrag.config import get_config, DEFAULT_NOTE_TEMPLATE
         try:
             cfg = get_config()
             template = cfg.note_template
@@ -64,7 +64,7 @@ def write_note(
 
     # Determine inbox path
     if inbox_path is None:
-        from config import get_config
+        from obsrag.config import get_config
         cfg = get_config()
         inbox_path = cfg.inbox_path
 

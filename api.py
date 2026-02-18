@@ -10,12 +10,12 @@ from pathlib import Path
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from pydantic import BaseModel
 
-from config import get_config
-from indexer import load_documents, build_or_load_index
-from tags import load_tag_set, build_tag_context
-from suggest import suggest_links_and_tags, suggest_tags_via_llm
-from ocr import ocr_pdf_with_llm
-from write_to_obsidian import write_note
+from obsrag.config import get_config
+from obsrag.rag.indexer import load_documents, build_or_load_index
+from obsrag.rag.tags import load_tag_set, build_tag_context
+from obsrag.rag.suggest import suggest_links_and_tags, suggest_tags_via_llm
+from obsrag.ocr import ocr_pdf_with_llm
+from obsrag.writer import write_note
 from llama_index.core.postprocessor import SentenceTransformerRerank
 
 app = FastAPI(title="Obsidian RAG API", version="1.0.0")

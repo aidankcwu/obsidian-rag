@@ -1,4 +1,4 @@
-"""Classify OCR regions into text, math, and diagram"""
+"""Classify OCR regions into text, math, and diagram."""
 import re
 from google.cloud import vision
 

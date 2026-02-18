@@ -95,8 +95,8 @@ def init():
 @cli.command()
 def build():
     """Build or rebuild the vector index."""
-    from config import get_config
-    from indexer import load_documents, build_or_load_index
+    from obsrag.config import get_config
+    from obsrag.rag.indexer import load_documents, build_or_load_index
 
     cfg = get_config()
 
@@ -118,8 +118,8 @@ def build():
 @click.argument("pdf", type=click.Path(exists=True, path_type=Path))
 def process(pdf: Path):
     """Process a single PDF through the full pipeline."""
-    from config import get_config
-    from main import setup, process_pdf
+    from obsrag.config import get_config
+    from obsrag.pipeline import setup, process_pdf
 
     cfg = get_config()
     docs, index, tag_set, tag_context, reranker = setup(cfg)
@@ -129,9 +129,9 @@ def process(pdf: Path):
 @cli.command()
 def watch():
     """Watch folder for new PDFs and process them automatically."""
-    from config import get_config
-    from main import setup, process_pdf
-    from watcher import watch_loop
+    from obsrag.config import get_config
+    from obsrag.pipeline import setup, process_pdf
+    from obsrag.watcher import watch_loop
 
     cfg = get_config()
     if not cfg.watch_folder:

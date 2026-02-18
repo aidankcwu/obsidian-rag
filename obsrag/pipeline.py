@@ -1,22 +1,11 @@
-"""Entry point for the Obsidian RAG system.
-
-Usage:
-    python main.py <pdf_path>    Process a single PDF
-    python main.py --watch       Watch folder for new PDFs
-
-Prefer using cli.py for the full CLI experience:
-    python cli.py process <pdf>
-    python cli.py watch
-"""
-import sys
+"""Core pipeline — setup and PDF processing logic."""
 from pathlib import Path
-from config import get_config
-from indexer import load_documents, build_or_load_index
-from tags import load_tag_set, build_tag_context
-from suggest import suggest_links_and_tags, suggest_tags_via_llm
-from ocr import ocr_pdf_with_llm
-from write_to_obsidian import write_note
-from watcher import watch_loop
+from obsrag.config import get_config
+from obsrag.rag.indexer import load_documents, build_or_load_index
+from obsrag.rag.tags import load_tag_set, build_tag_context
+from obsrag.rag.suggest import suggest_links_and_tags, suggest_tags_via_llm
+from obsrag.ocr import ocr_pdf_with_llm
+from obsrag.writer import write_note
 from llama_index.core.postprocessor import SentenceTransformerRerank
 
 
@@ -118,35 +107,3 @@ def process_pdf(pdf_path: Path, docs, index, tag_set, tag_context, reranker, cfg
         template=cfg.note_template,
     )
     print(f"\nNote saved to: {note_path}")
-
-
-def main():
-    if len(sys.argv) < 2:
-        print("Usage:")
-        print("  python main.py <pdf_path>    Process a single PDF")
-        print("  python main.py --watch       Watch folder for new PDFs")
-        print("\nOr use the CLI: python cli.py --help")
-        sys.exit(1)
-
-    cfg = get_config()
-    docs, index, tag_set, tag_context, reranker = setup(cfg)
-
-    if sys.argv[1] == "--watch":
-        if not cfg.watch_folder:
-            print("Error: watch_folder not set in .obsrag.yaml")
-            sys.exit(1)
-        watch_loop(
-            process_fn=lambda pdf: process_pdf(pdf, docs, index, tag_set, tag_context, reranker, cfg),
-            watch_folder=cfg.watch_folder,
-            poll_interval=cfg.watcher.poll_interval,
-        )
-    else:
-        pdf_path = Path(sys.argv[1])
-        if not pdf_path.exists():
-            print(f"Error: {pdf_path} not found")
-            sys.exit(1)
-        process_pdf(pdf_path, docs, index, tag_set, tag_context, reranker, cfg)
-
-
-if __name__ == "__main__":
-    main()
