@@ -148,7 +148,7 @@ async def process(file: UploadFile = File(...)):
             f.write(content)
 
         # OCR
-        input_text = ocr_pdf_with_llm(tmp_path, model=cfg.ocr.model)
+        input_text, page_images, page_offsets = ocr_pdf_with_llm(tmp_path, model=cfg.ocr.model)
 
         # Layer 1: Retrieval-based suggestions
         result = suggest_links_and_tags(
@@ -187,6 +187,9 @@ async def process(file: UploadFile = File(...)):
             inbox_path=cfg.inbox_path,
             tag_style=cfg.tags.style,
             template=cfg.note_template,
+            page_images=page_images,
+            page_offsets=page_offsets,
+            attachments_path=cfg.attachments_path,
         )
 
         return ProcessResponse(

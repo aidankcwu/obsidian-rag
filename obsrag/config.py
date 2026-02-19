@@ -33,6 +33,7 @@ Tags: {tags}
 class FoldersConfig:
     inbox: str = "1 - Inbox"
     tags: str = "3 - Tags"
+    attachments: str = "attachments"
 
 
 @dataclass
@@ -87,6 +88,10 @@ class Config:
     @property
     def tags_folder(self) -> Path:
         return self.vault_path / self.folders.tags
+
+    @property
+    def attachments_path(self) -> Path:
+        return self.vault_path / self.folders.attachments
 
 
 def _find_config_file() -> Path | None:

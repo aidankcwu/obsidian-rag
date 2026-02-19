@@ -40,7 +40,7 @@ def process_pdf(pdf_path: Path, docs, index, tag_set, tag_context, reranker, cfg
 
     # OCR
     print(f"Processing PDF: {pdf_path}")
-    input_text = ocr_pdf_with_llm(pdf_path, model=cfg.ocr.model)
+    input_text, page_images, page_offsets = ocr_pdf_with_llm(pdf_path, model=cfg.ocr.model)
     print(f"\n--- OCR Output ---\n{input_text[:500]}...\n")
 
     # Layer 1: Retrieval-based suggestions
@@ -105,5 +105,8 @@ def process_pdf(pdf_path: Path, docs, index, tag_set, tag_context, reranker, cfg
         inbox_path=cfg.inbox_path,
         tag_style=cfg.tags.style,
         template=cfg.note_template,
+        page_images=page_images,
+        page_offsets=page_offsets,
+        attachments_path=cfg.attachments_path,
     )
     print(f"\nNote saved to: {note_path}")
