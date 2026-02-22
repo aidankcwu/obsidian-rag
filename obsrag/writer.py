@@ -98,16 +98,6 @@ def _find_page_for_position(pos: int, page_offsets: list[tuple[int, int]]) -> in
     return len(page_offsets) - 1
 
 
-def _crop_diagram(page_image: Image.Image, x_min: int, y_min: int, x_max: int, y_max: int, padding: int = 15) -> Image.Image:
-    """Crop a diagram region from a page image with padding, clamped to image bounds."""
-    w, h = page_image.size
-    left = max(0, x_min - padding)
-    top = max(0, y_min - padding)
-    right = min(w, x_max + padding)
-    bottom = min(h, y_max + padding)
-    return page_image.crop((left, top, right, bottom))
-
-
 def _embed_diagrams(
     content: str,
     title: str,
@@ -115,49 +105,31 @@ def _embed_diagrams(
     page_offsets: list[tuple[int, int]],
     attachments_path: Path,
 ) -> str:
-    """Replace diagram markers with embedded images saved to the attachments folder."""
+    """Replace [Diagram: ...] markers with collapsed Obsidian callouts containing page images."""
     attachments_path.mkdir(parents=True, exist_ok=True)
 
     # Sanitize title for use in filenames
     safe_title = re.sub(r'[^\w\s-]', '', title).strip().replace(' ', '_')
 
-    diagram_count = 0
+    # Track which pages have already been saved to avoid duplicates
+    saved_pages: dict[int, str] = {}  # page_idx -> img_name
 
-    # Pattern for coordinate-based markers: [DIAGRAM x_min y_min x_max y_max]
-    coord_pattern = re.compile(r'\[DIAGRAM\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\]')
-    # Fallback pattern for description-based markers: [Diagram: description]
-    fallback_pattern = re.compile(r'\[Diagram:\s*([^\]]*)\]')
+    pattern = re.compile(r'\[Diagram:\s*([^\]]*)\]')
 
-    def replace_coord_match(match):
-        nonlocal diagram_count
-        diagram_count += 1
-        x_min, y_min, x_max, y_max = (int(v) for v in match.groups())
+    def replace_match(match):
+        description = match.group(1).strip() or "diagram"
         page_idx = _find_page_for_position(match.start(), page_offsets)
-        page_img = page_images[page_idx]
 
-        cropped = _crop_diagram(page_img, x_min, y_min, x_max, y_max)
-        img_name = f"{safe_title}_p{page_idx + 1}_d{diagram_count}.png"
-        img_path = attachments_path / img_name
-        cropped.save(img_path, format="PNG")
-        print(f"  Saved diagram: {img_path}")
-        return f"![[{img_name}]]"
+        # Save page image once per page
+        if page_idx not in saved_pages:
+            img_name = f"{safe_title}_page_{page_idx + 1}.png"
+            img_path = attachments_path / img_name
+            page_images[page_idx].save(img_path, format="PNG")
+            saved_pages[page_idx] = img_name
+            print(f"  Saved page image: {img_path}")
 
-    def replace_fallback_match(match):
-        nonlocal diagram_count
-        diagram_count += 1
-        page_idx = _find_page_for_position(match.start(), page_offsets)
-        page_img = page_images[page_idx]
+        img_name = saved_pages[page_idx]
+        # Both lines need > prefix for Obsidian to treat the image as part of the callout
+        return f"> [!info]- Original page (diagram: {description})\n> ![[{img_name}]]"
 
-        # Save full page image as fallback
-        img_name = f"{safe_title}_p{page_idx + 1}_d{diagram_count}.png"
-        img_path = attachments_path / img_name
-        page_img.save(img_path, format="PNG")
-        print(f"  Saved diagram (full page fallback): {img_path}")
-        return f"![[{img_name}]]"
-
-    # First pass: replace coordinate-based markers
-    content = coord_pattern.sub(replace_coord_match, content)
-    # Second pass: replace any remaining description-based markers
-    content = fallback_pattern.sub(replace_fallback_match, content)
-
-    return content
+    return pattern.sub(replace_match, content)

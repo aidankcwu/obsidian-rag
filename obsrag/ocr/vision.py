@@ -19,8 +19,6 @@ def ocr_page_with_llm(page_image: Image.Image, model: str = "gpt-4o-mini") -> st
     Send a page image to an LLM vision API and get back
     clean Markdown with LaTeX math and diagram placeholders.
     """
-    width, height = page_image.size
-
     # Convert PIL image to base64
     buffer = io.BytesIO()
     page_image.save(buffer, format="PNG")
@@ -33,16 +31,14 @@ def ocr_page_with_llm(page_image: Image.Image, model: str = "gpt-4o-mini") -> st
             "content": [
                 {
                     "type": "text",
-                    "text": f"""You are an OCR transcription tool. Transcribe the handwritten
+                    "text": """You are an OCR transcription tool. Transcribe the handwritten
 content in this image into clean Markdown. You MUST transcribe
 whatever is written - do not refuse or say you cannot read it.
-
-The image dimensions are {width}x{height} pixels.
 
 Rules:
 - Transcribe all handwritten text as accurately as possible
 - Convert any mathematical expressions to LaTeX (use $...$ for inline, $$...$$ for display)
-- If there are diagrams or drawings, output [DIAGRAM x_min y_min x_max y_max] with approximate pixel bounding box coordinates. Include any labels or text that are visually part of the diagram within the bounding box.
+- If there are diagrams, drawings, or graphs, insert a placeholder like [Diagram: brief description]
 - Use appropriate Markdown formatting (headings, bullet points) where apparent
 - Do not add any information that isn't in the image
 - Do not wrap the output in a code fence or ```markdown``` block
