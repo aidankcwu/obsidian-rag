@@ -114,7 +114,8 @@ def _embed_diagrams(
     # Track which pages have already been saved to avoid duplicates
     saved_pages: dict[int, str] = {}  # page_idx -> img_name
 
-    pattern = re.compile(r'\[Diagram:\s*([^\]]*)\]')
+    # Match marker with optional leading list syntax (- , * , • , whitespace)
+    pattern = re.compile(r'[ \t]*[-*•]?\s*\[Diagram:\s*([^\]]*)\]')
 
     def replace_match(match):
         description = match.group(1).strip() or "diagram"
@@ -129,7 +130,11 @@ def _embed_diagrams(
             print(f"  Saved page image: {img_path}")
 
         img_name = saved_pages[page_idx]
-        # Both lines need > prefix for Obsidian to treat the image as part of the callout
-        return f"> [!info]- Original page (diagram: {description})\n> ![[{img_name}]]"
+        # Surround with blank lines so the callout is never nested inside a list.
+        # Both lines need > prefix for Obsidian to treat the image as part of the callout.
+        return f"\n\n> [!info]- Original page (diagram: {description})\n> ![[{img_name}]]\n\n"
 
-    return pattern.sub(replace_match, content)
+    result = pattern.sub(replace_match, content)
+    # Collapse triple+ blank lines left by the insertion
+    result = re.sub(r'\n{3,}', '\n\n', result)
+    return result
