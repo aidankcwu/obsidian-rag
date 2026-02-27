@@ -1,0 +1,26 @@
+# Core
+llama-index
+llama-index-readers-obsidian
+llama-index-embeddings-openai
+openai
+python-dotenv
+
+# PDF processing
+pdf2image
+Pillow
+
+# RAG / reranking
+sentence-transformers
+
+# API
+fastapi
+uvicorn
+python-multipart
+
+# CLI / config
+click
+pyyaml
+
+# Optional: Google Cloud Vision + LaTeX OCR (alternative to OpenAI vision)
+# google-cloud-vision
+# pix2tex

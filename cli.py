@@ -96,14 +96,18 @@ def init():
 def build():
     """Build or rebuild the vector index."""
     from obsrag.config import get_config
-    from obsrag.rag.indexer import load_documents, build_or_load_index
+    from obsrag.rag.indexer import load_documents, build_or_load_index, _manifest_path
 
     cfg = get_config()
 
-    # Remove existing index to force rebuild
+    # Remove existing index and manifest to force a clean rebuild
     if cfg.persist_dir.exists():
         shutil.rmtree(cfg.persist_dir)
         click.echo("Removed existing index.")
+    manifest = _manifest_path(cfg.persist_dir)
+    if manifest.exists():
+        manifest.unlink()
+        click.echo("Removed manifest.")
 
     docs = load_documents(cfg.vault_path)
     build_or_load_index(

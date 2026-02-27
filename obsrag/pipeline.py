@@ -1,8 +1,8 @@
 """Core pipeline — setup and PDF processing logic."""
 from pathlib import Path
 from obsrag.config import get_config
-from obsrag.rag.indexer import load_documents, build_or_load_index
-from obsrag.rag.tags import load_tag_set, build_tag_context
+from obsrag.rag.indexer import load_documents, build_or_load_index, add_note_to_index, sync_index
+from obsrag.rag.tags import load_tag_set, build_tag_context, refresh_tag_set
 from obsrag.rag.suggest import suggest_links_and_tags, suggest_tags_via_llm
 from obsrag.ocr import ocr_pdf_with_llm
 from obsrag.writer import write_note
@@ -17,6 +17,11 @@ def setup(cfg=None):
     docs = load_documents(cfg.vault_path)
     index = build_or_load_index(
         docs, cfg.persist_dir, cfg.embedding.model,
+        chunk_size=cfg.embedding.chunk_size,
+        chunk_overlap=cfg.embedding.chunk_overlap,
+    )
+    sync_index(
+        index, docs, cfg.vault_path, cfg.persist_dir,
         chunk_size=cfg.embedding.chunk_size,
         chunk_overlap=cfg.embedding.chunk_overlap,
     )
@@ -110,3 +115,20 @@ def process_pdf(pdf_path: Path, docs, index, tag_set, tag_context, reranker, cfg
         attachments_path=cfg.attachments_path,
     )
     print(f"\nNote saved to: {note_path}")
+
+    # Incrementally update the index so subsequent PDFs can find this note
+    new_doc = add_note_to_index(
+        index, note_path, cfg.vault_path, cfg.persist_dir,
+        chunk_size=cfg.embedding.chunk_size,
+        chunk_overlap=cfg.embedding.chunk_overlap,
+    )
+    docs.append(new_doc)
+
+    # Refresh tag set in case new tags were written to the vault
+    new_tag_set, new_tag_context = refresh_tag_set(
+        cfg.vault_path, cfg.folders.tags, cfg.tags.style, docs,
+    )
+    tag_set.clear()
+    tag_set.update(new_tag_set)
+    tag_context.clear()
+    tag_context.update(new_tag_context)

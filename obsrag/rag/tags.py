@@ -56,6 +56,23 @@ def _scan_hashtags(vault_path: Path) -> set[str]:
     return tags
 
 
+def refresh_tag_set(
+    vault_path: Path,
+    tags_folder_name: str,
+    tag_style: str,
+    docs: list,
+) -> tuple[set[str], dict[str, list[str]]]:
+    """
+    Reload the tag set from disk and rebuild the tag context map.
+
+    Call after writing a new note so the in-memory state reflects any new tags
+    that were created. Returns (tag_set, tag_context) ready to replace existing state.
+    """
+    tag_set = load_tag_set(vault_path, style=tag_style, tags_folder_name=tags_folder_name)
+    tag_context = build_tag_context(docs, tag_set)
+    return tag_set, tag_context
+
+
 def build_tag_context(docs: list, tag_set: set[str]) -> dict[str, list[str]]:
     """
     Build a mapping of each tag to the note titles that reference it.
