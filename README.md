@@ -10,7 +10,7 @@ The index stays current automatically: at startup it diffs every vault file agai
 
 | Handwritten PDF | Obsidian Output |
 |:-:|:-:|
-| ![Before](docs/before.png) | ![After](docs/after.png) |
+| ![Before](docs/Before.png) | ![After](docs/After.png) |
 
 ---
 
