@@ -18,7 +18,7 @@ The index stays current automatically: at startup it diffs every vault file agai
 
 **1. Clone and install:**
 ```bash
-git clone https://github.com/yourusername/obsidian-rag.git
+git clone https://github.com/aidankcwu/obsidian-rag.git
 cd obsidian-rag
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt

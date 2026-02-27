@@ -9,7 +9,7 @@ vault_path: ~/path/to/your/vault
 folders:
   inbox: "1 - Inbox"         # Where new notes are written
   tags: "3 - Tags"           # Folder containing tag .md files (wikilink style)
-  # attachments: "Attachments"  # (reserved for future use)
+  attachments: "Attachments"    # Where diagram images are saved (created if absent)
 
 # Folder to watch for new PDFs (e.g. GoodNotes export folder)
 watch_folder: ~/path/to/watch/folder
