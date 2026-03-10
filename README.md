@@ -86,7 +86,7 @@ Starts a server on `http://localhost:8000`. See [docs/api.md](docs/api.md) for a
 ### File Watcher
 
 ```bash
-python cli.py watch
+
 ```
 
 Polls a configured folder (e.g. a GoodNotes export directory) for new PDFs every 30 seconds. Tracks processed files to avoid reprocessing. Each processed note is added to the index immediately, so later PDFs in the same session can retrieve notes written earlier. Manual edits made in Obsidian since the last run are detected and re-indexed automatically at startup.

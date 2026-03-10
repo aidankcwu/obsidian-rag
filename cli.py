@@ -4,6 +4,7 @@ Usage:
     python cli.py init              Interactive setup — generates .obsrag.yaml
     python cli.py build             Build or rebuild the vector index
     python cli.py process <pdf>     Process a single PDF through the pipeline
+    python cli.py suggest <note>    Suggest additional tags for an existing note
     python cli.py watch             Watch folder for new PDFs
 """
 import shutil
@@ -128,6 +129,100 @@ def process(pdf: Path):
     cfg = get_config()
     docs, index, tag_set, tag_context, reranker = setup(cfg)
     process_pdf(pdf, docs, index, tag_set, tag_context, reranker, cfg)
+
+
+@cli.command()
+@click.argument("note", type=click.Path(exists=True, path_type=Path))
+def suggest(note: Path):
+    """Suggest additional tags for an existing Markdown note and insert them inline."""
+    import re
+    import subprocess
+    from obsrag.config import get_config
+    from obsrag.pipeline import setup
+    from obsrag.rag.suggest import suggest_links_and_tags, suggest_tags_via_llm
+
+    def notify(title: str, body: str):
+        script = f'display notification "{body}" with title "{title}"'
+        subprocess.run(["osascript", "-e", script], check=False)
+
+    try:
+        cfg = get_config()
+        docs, index, tag_set, tag_context, reranker = setup(cfg)
+
+        text = note.read_text(encoding="utf-8")
+
+        # Parse existing tags from the Tags: line
+        tags_line_match = re.search(r"^Tags:(.*)$", text, re.MULTILINE)
+        existing_tags: set[str] = set()
+        tag_format = cfg.tags.style  # default format from config
+
+        if tags_line_match:
+            tags_line_content = tags_line_match.group(1)
+            wikilink_tags = re.findall(r"\[\[([^\]]+)\]\]", tags_line_content)
+            hashtag_tags = re.findall(r"#([\w/-]+)", tags_line_content)
+            if wikilink_tags:
+                existing_tags.update(wikilink_tags)
+                tag_format = "wikilink"
+            if hashtag_tags:
+                existing_tags.update(hashtag_tags)
+                if not wikilink_tags:
+                    tag_format = "hashtag"
+
+        # Run suggestion pipeline
+        result = suggest_links_and_tags(
+            text,
+            index,
+            tag_set,
+            docs,
+            reranker=reranker,
+            top_k=cfg.rag.top_k,
+        )
+        retrieval_tags = [t["title"] for t in result["suggested_tags"]]
+        top_score = result["suggested_links"][0]["score"] if result["suggested_links"] else 0
+
+        if len(retrieval_tags) < cfg.rag.min_tags_threshold or top_score < cfg.rag.min_confidence_threshold:
+            llm_result = suggest_tags_via_llm(
+                note_text=text,
+                all_tags=sorted(tag_set),
+                retrieval_tags=retrieval_tags,
+                filename=note.name,
+                tag_context=tag_context,
+            )
+            all_suggested = llm_result.get("existing_tags", []) + llm_result.get("new_tags", [])
+        else:
+            all_suggested = retrieval_tags
+
+        # Filter out already-assigned tags and pick top 2-3
+        new_tags = [t for t in all_suggested if t not in existing_tags][:3]
+
+        if not new_tags:
+            notify("ObsRAG", "No additional tags to suggest")
+            click.echo("No additional tags to suggest.")
+            return
+
+        # Format new tags to match existing style
+        if tag_format == "wikilink":
+            formatted = " ".join(f"[[{t}]]" for t in new_tags)
+        else:
+            formatted = " ".join(f"#{t}" for t in new_tags)
+
+        # Append to the Tags: line (or add one if missing)
+        if tags_line_match:
+            original_line = tags_line_match.group(0)
+            updated_line = original_line.rstrip() + " " + formatted
+            updated_text = text[:tags_line_match.start()] + updated_line + text[tags_line_match.end():]
+        else:
+            updated_text = text.rstrip() + f"\nTags: {formatted}\n"
+
+        note.write_text(updated_text, encoding="utf-8")
+
+        tag_names = ", ".join(new_tags)
+        notify("ObsRAG", f"Added tags: {tag_names}")
+        click.echo(f"Added tags: {tag_names}")
+
+    except Exception as e:
+        notify("ObsRAG", str(e))
+        raise
 
 
 @cli.command()

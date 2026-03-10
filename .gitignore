@@ -17,6 +17,9 @@ ENV/
 .env
 
 
+# Raycast
+raycast-scripts/
+
 # IDE
 .vscode/
 .idea/
