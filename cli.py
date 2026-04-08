@@ -1,23 +1,37 @@
 """CLI for Obsidian RAG.
 
 Usage:
-    python cli.py init              Interactive setup — generates .obsrag.yaml
-    python cli.py build             Build or rebuild the vector index
-    python cli.py process <pdf>     Process a single PDF through the pipeline
-    python cli.py suggest <note>    Suggest additional tags for an existing note
-    python cli.py watch             Watch folder for new PDFs
+    obsrag init              Interactive setup — generates ~/.obsrag.yaml
+    obsrag build             Build or rebuild the vector index
+    obsrag sync              Sync the index against the current vault state
+    obsrag process <pdf>     Process a single PDF through the pipeline
+    obsrag suggest <note>    Suggest additional tags for an existing note
+    obsrag watch             Watch folder for new PDFs
 """
+import platform
 import shutil
+import subprocess
 from pathlib import Path
 
 import click
 import yaml
+
+from obsrag.config import default_config_path
+from obsrag.validation import validate_environment
 
 
 @click.group()
 def cli():
     """Obsidian RAG — OCR handwritten notes into your Obsidian vault."""
     pass
+
+
+def main():
+    """CLI entrypoint that converts setup errors into user-facing messages."""
+    try:
+        cli()
+    except (FileNotFoundError, ValueError) as exc:
+        raise click.ClickException(str(exc)) from exc
 
 
 @cli.command()
@@ -45,24 +59,19 @@ def init():
 
     inbox = click.prompt("Inbox folder name", default="1 - Inbox")
     tags_folder = click.prompt("Tags folder name", default="3 - Tags")
-
-    ocr_provider = click.prompt(
-        "OCR provider",
-        type=click.Choice(["openai_vision", "google_vision"]),
-        default="openai_vision",
-    )
+    attachments_folder = click.prompt("Attachments folder name", default="attachments")
 
     config = {
         "vault_path": vault_path,
         "folders": {
             "inbox": inbox,
             "tags": tags_folder,
+            "attachments": attachments_folder,
         },
         "tags": {
             "style": tag_style,
         },
         "ocr": {
-            "provider": ocr_provider,
             "model": "gpt-4o-mini",
         },
         "embedding": {
@@ -85,12 +94,12 @@ def init():
     if watch_folder:
         config["watch_folder"] = str(Path(watch_folder).expanduser())
 
-    out_path = Path(".obsrag.yaml")
-    with open(out_path, "w") as f:
+    out_path = Path(".obsrag.yaml") if Path(".obsrag.yaml").exists() else default_config_path()
+    with open(out_path, "w", encoding="utf-8") as f:
         yaml.dump(config, f, default_flow_style=False, sort_keys=False)
 
     click.echo(f"\nConfig written to {out_path}")
-    click.echo("Edit .obsrag.yaml to customize further, then run: python cli.py build")
+    click.echo("Edit the config if needed, add OPENAI_API_KEY, then run: obsrag build")
 
 
 @cli.command()
@@ -100,6 +109,7 @@ def build():
     from obsrag.rag.indexer import load_documents, build_or_load_index, _manifest_path
 
     cfg = get_config()
+    validate_environment(cfg)
 
     # Remove existing index and manifest to force a clean rebuild
     if cfg.persist_dir.exists():
@@ -120,6 +130,28 @@ def build():
 
 
 @cli.command()
+def sync():
+    """Sync the vector index against the current vault state (incremental, mtime-based)."""
+    from obsrag.config import get_config
+    from obsrag.rag.indexer import load_documents, build_or_load_index, sync_index
+
+    cfg = get_config()
+    validate_environment(cfg)
+    docs = load_documents(cfg.vault_path)
+    index = build_or_load_index(
+        docs, cfg.persist_dir, cfg.embedding.model,
+        chunk_size=cfg.embedding.chunk_size,
+        chunk_overlap=cfg.embedding.chunk_overlap,
+    )
+    sync_index(
+        index, docs, cfg.vault_path, cfg.persist_dir,
+        chunk_size=cfg.embedding.chunk_size,
+        chunk_overlap=cfg.embedding.chunk_overlap,
+    )
+    click.echo("Sync complete.")
+
+
+@cli.command()
 @click.argument("pdf", type=click.Path(exists=True, path_type=Path))
 def process(pdf: Path):
     """Process a single PDF through the full pipeline."""
@@ -136,17 +168,19 @@ def process(pdf: Path):
 def suggest(note: Path):
     """Suggest additional tags for an existing Markdown note and insert them inline."""
     import re
-    import subprocess
     from obsrag.config import get_config
     from obsrag.pipeline import setup
     from obsrag.rag.suggest import suggest_links_and_tags, suggest_tags_via_llm
 
     def notify(title: str, body: str):
+        if platform.system() != "Darwin" or shutil.which("osascript") is None:
+            return
         script = f'display notification "{body}" with title "{title}"'
         subprocess.run(["osascript", "-e", script], check=False)
 
     try:
         cfg = get_config()
+        validate_environment(cfg)
         docs, index, tag_set, tag_context, reranker = setup(cfg)
 
         text = note.read_text(encoding="utf-8")
@@ -233,17 +267,16 @@ def watch():
     from obsrag.watcher import watch_loop
 
     cfg = get_config()
-    if not cfg.watch_folder:
-        click.echo("Error: watch_folder not set in .obsrag.yaml")
-        raise SystemExit(1)
+    validate_environment(cfg, require_watch_folder=True)
 
     docs, index, tag_set, tag_context, reranker = setup(cfg)
     watch_loop(
         process_fn=lambda pdf: process_pdf(pdf, docs, index, tag_set, tag_context, reranker, cfg),
         watch_folder=cfg.watch_folder,
+        log_path=cfg.processed_log_path,
         poll_interval=cfg.watcher.poll_interval,
     )
 
 
 if __name__ == "__main__":
-    cli()
+    main()

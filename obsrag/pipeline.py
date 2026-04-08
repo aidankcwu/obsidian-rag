@@ -1,6 +1,7 @@
 """Core pipeline — setup and PDF processing logic."""
 from pathlib import Path
 from obsrag.config import get_config
+from obsrag.validation import validate_environment
 from obsrag.rag.indexer import load_documents, build_or_load_index, add_note_to_index, sync_index
 from obsrag.rag.tags import load_tag_set, build_tag_context, refresh_tag_set
 from obsrag.rag.suggest import suggest_links_and_tags, suggest_tags_via_llm
@@ -14,6 +15,7 @@ def setup(cfg=None):
     if cfg is None:
         cfg = get_config()
 
+    validate_environment(cfg)
     docs = load_documents(cfg.vault_path)
     index = build_or_load_index(
         docs, cfg.persist_dir, cfg.embedding.model,
@@ -43,6 +45,7 @@ def process_pdf(pdf_path: Path, docs, index, tag_set, tag_context, reranker, cfg
     if cfg is None:
         cfg = get_config()
 
+    validate_environment(cfg, require_poppler=True)
     # OCR
     print(f"Processing PDF: {pdf_path}")
     input_text, page_images, page_offsets = ocr_pdf_with_llm(pdf_path, model=cfg.ocr.model)

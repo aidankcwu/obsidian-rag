@@ -8,7 +8,8 @@ Provides two layers of tag suggestion:
    uses GPT to intelligently select from all available tags.
 """
 import json
-import openai
+
+from obsrag.openai_client import get_openai_client
 
 
 def suggest_links_and_tags(
@@ -187,7 +188,7 @@ Return format:
     "reasoning": "brief explanation of choices"
 }}"""
 
-    response = openai.chat.completions.create(
+    response = get_openai_client().chat.completions.create(
         model="gpt-4o-mini",
         messages=[{"role": "user", "content": prompt}],
         temperature=0,

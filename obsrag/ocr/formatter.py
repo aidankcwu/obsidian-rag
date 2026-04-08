@@ -1,5 +1,6 @@
 """Format classified OCR regions into clean Markdown."""
-import openai
+
+from obsrag.openai_client import get_openai_client
 
 
 def regions_to_raw_markdown(regions: list[dict]) -> str:
@@ -18,7 +19,7 @@ def regions_to_raw_markdown(regions: list[dict]) -> str:
 
 def format_with_llm(raw_markdown: str) -> str:
     """Use LLM to clean up and structure the raw Markdown."""
-    response = openai.chat.completions.create(
+    response = get_openai_client().chat.completions.create(
         model="gpt-4o-mini",
         messages=[{
             "role": "user",

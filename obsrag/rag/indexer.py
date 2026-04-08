@@ -13,7 +13,7 @@ from llama_index.embeddings.openai import OpenAIEmbedding
 # ---------------------------------------------------------------------------
 
 def _manifest_path(persist_dir: Path) -> Path:
-    """Manifest lives alongside the index dir: .obsrag/manifest.json"""
+    """Manifest lives alongside the index dir."""
     return persist_dir.parent / "manifest.json"
 
 

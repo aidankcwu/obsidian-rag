@@ -1,22 +1,32 @@
 """FastAPI REST API for the Obsidian RAG pipeline.
 
 Usage:
-    python api.py              Start the API server on port 8000
-    uvicorn api:app --reload   Start with auto-reload for development
+    pip install .[api]
+    uvicorn api:app --reload
 """
 import tempfile
 import shutil
 from pathlib import Path
-from fastapi import FastAPI, UploadFile, File, HTTPException
-from pydantic import BaseModel
 
-from obsrag.config import get_config
-from obsrag.rag.indexer import load_documents, build_or_load_index, add_note_to_index, sync_index
-from obsrag.rag.tags import load_tag_set, build_tag_context, refresh_tag_set
-from obsrag.rag.suggest import suggest_links_and_tags, suggest_tags_via_llm
-from obsrag.ocr import ocr_pdf_with_llm
-from obsrag.writer import write_note
-from llama_index.core.postprocessor import SentenceTransformerRerank
+try:
+    from fastapi import FastAPI, UploadFile, File, HTTPException
+    from pydantic import BaseModel
+except ModuleNotFoundError as exc:
+    raise RuntimeError("API dependencies are not installed. Run 'pip install .[api]'.") from exc
+
+try:
+    from obsrag.config import get_config
+    from obsrag.validation import validate_environment
+    from obsrag.rag.indexer import load_documents, build_or_load_index, add_note_to_index, sync_index
+    from obsrag.rag.tags import load_tag_set, build_tag_context, refresh_tag_set
+    from obsrag.rag.suggest import suggest_links_and_tags, suggest_tags_via_llm
+    from obsrag.ocr import ocr_pdf_with_llm
+    from obsrag.writer import write_note
+    from llama_index.core.postprocessor import SentenceTransformerRerank
+except ModuleNotFoundError as exc:
+    raise RuntimeError(
+        "Core dependencies are not installed. Run 'pip install .[api]' from the repository root."
+    ) from exc
 
 app = FastAPI(title="Obsidian RAG API", version="1.0.0")
 
@@ -61,6 +71,7 @@ def startup():
     """Initialize all shared resources once at startup."""
     global cfg, docs, index, tag_set, tag_context, reranker
     cfg = get_config()
+    validate_environment(cfg)
     print("Initializing Obsidian RAG pipeline...")
     docs = load_documents(cfg.vault_path)
     index = build_or_load_index(
@@ -148,6 +159,7 @@ async def process(file: UploadFile = File(...)):
     tmp_dir = Path(tempfile.mkdtemp())
     tmp_path = tmp_dir / file.filename
     try:
+        validate_environment(cfg, require_poppler=True)
         with open(tmp_path, "wb") as f:
             content = await file.read()
             f.write(content)
@@ -222,6 +234,10 @@ async def process(file: UploadFile = File(...)):
             llm_tags=llm_tags,
             note_path=str(note_path),
         )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to process PDF: {exc}") from exc
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
 

@@ -83,11 +83,21 @@ def write_note(
         inbox_path = cfg.inbox_path
 
     inbox_path.mkdir(parents=True, exist_ok=True)
-    file_path = inbox_path / f"{title}.md"
-    file_path.write_text(note)
+    file_path = _resolve_note_path(inbox_path, title)
+    file_path.write_text(note, encoding="utf-8")
     print(f"Note written to {file_path}")
 
     return file_path
+
+
+def _resolve_note_path(inbox_path: Path, title: str) -> Path:
+    """Return a note path without overwriting an existing file."""
+    candidate = inbox_path / f"{title}.md"
+    if not candidate.exists():
+        return candidate
+
+    suffix = datetime.now().strftime("%Y%m%d-%H%M%S")
+    return inbox_path / f"{title} {suffix}.md"
 
 
 def _find_page_for_position(pos: int, page_offsets: list[tuple[int, int]]) -> int:

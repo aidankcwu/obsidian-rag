@@ -4,7 +4,8 @@ import base64
 from pathlib import Path
 from PIL import Image
 from pdf2image import convert_from_path
-import openai
+
+from obsrag.openai_client import get_openai_client
 
 
 def pdf_to_images(pdf_path: Path) -> list[Image.Image]:
@@ -24,7 +25,7 @@ def ocr_page_with_llm(page_image: Image.Image, model: str = "gpt-4o-mini") -> st
     page_image.save(buffer, format="PNG")
     b64_image = base64.b64encode(buffer.getvalue()).decode("utf-8")
 
-    response = openai.chat.completions.create(
+    response = get_openai_client().chat.completions.create(
         model=model,
         messages=[{
             "role": "user",

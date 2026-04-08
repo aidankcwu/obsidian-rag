@@ -1,16 +1,9 @@
-"""Configuration loader for Obsidian RAG.
-
-Reads settings from .obsrag.yaml (CWD first, then ~/.obsrag.yaml).
-API keys are loaded from .env as before.
-Config is loaded lazily via get_config() so that cli init works without a config file.
-"""
+"""Configuration loader for Obsidian RAG."""
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
 from dotenv import load_dotenv
-
-load_dotenv()
 
 # --- Default values ---
 
@@ -43,7 +36,7 @@ class TagsConfig:
 
 @dataclass
 class OcrConfig:
-    provider: str = "openai_vision"  # "openai_vision" or "google_vision"
+    provider: str = "openai_vision"
     model: str = "gpt-4o-mini"
 
 
@@ -72,7 +65,9 @@ class WatcherConfig:
 class Config:
     vault_path: Path = None
     watch_folder: Path = None
-    persist_dir: Path = field(default_factory=lambda: Path(".obsrag/index"))
+    config_path: Path = None
+    state_dir: Path = field(default_factory=lambda: Path.home() / ".obsrag")
+    persist_dir: Path = field(default_factory=lambda: Path.home() / ".obsrag" / "index")
     folders: FoldersConfig = field(default_factory=FoldersConfig)
     tags: TagsConfig = field(default_factory=TagsConfig)
     note_template: str = DEFAULT_NOTE_TEMPLATE
@@ -93,12 +88,25 @@ class Config:
     def attachments_path(self) -> Path:
         return self.vault_path / self.folders.attachments
 
+    @property
+    def manifest_path(self) -> Path:
+        return self.persist_dir.parent / "manifest.json"
+
+    @property
+    def processed_log_path(self) -> Path:
+        return self.state_dir / "processed.json"
+
+
+def default_config_path() -> Path:
+    """Return the default config path for new installs."""
+    return Path.home() / ".obsrag.yaml"
+
 
 def _find_config_file() -> Path | None:
     """Look for .obsrag.yaml in CWD, then home directory."""
     candidates = [
         Path.cwd() / ".obsrag.yaml",
-        Path.home() / ".obsrag.yaml",
+        default_config_path(),
     ]
     for path in candidates:
         if path.exists():
@@ -111,24 +119,52 @@ def _load_config() -> Config:
     path = _find_config_file()
     if path is None:
         raise FileNotFoundError(
-            "No .obsrag.yaml found. Run 'python cli.py init' to create one."
+            f"No .obsrag.yaml found. Run 'obsrag init' to create one at {default_config_path()}."
         )
 
-    with open(path) as f:
+    load_dotenv(path.parent / ".env")
+    load_dotenv()
+
+    with open(path, encoding="utf-8") as f:
         raw = yaml.safe_load(f) or {}
 
     vault_path = raw.get("vault_path")
     if not vault_path:
         raise ValueError("vault_path is required in .obsrag.yaml")
 
+    config_dir = path.parent
+    state_dir_raw = raw.get("state_dir")
+    if state_dir_raw:
+        state_dir = Path(state_dir_raw).expanduser()
+        if not state_dir.is_absolute():
+            state_dir = (config_dir / state_dir).resolve()
+    else:
+        state_dir = Path.home() / ".obsrag"
+
+    persist_dir_raw = raw.get("persist_dir")
+    if persist_dir_raw:
+        persist_dir = Path(persist_dir_raw).expanduser()
+        if not persist_dir.is_absolute():
+            persist_dir = (config_dir / persist_dir).resolve()
+    else:
+        persist_dir = state_dir / "index"
+
+    vault_path = Path(vault_path).expanduser()
+    if not vault_path.is_absolute():
+        vault_path = (config_dir / vault_path).resolve()
+
     cfg = Config(
-        vault_path=Path(vault_path).expanduser(),
-        persist_dir=Path(raw.get("persist_dir", ".obsrag/index")),
+        config_path=path.resolve(),
+        vault_path=vault_path,
+        state_dir=state_dir,
+        persist_dir=persist_dir,
         note_template=raw.get("note_template", DEFAULT_NOTE_TEMPLATE),
     )
 
     if raw.get("watch_folder"):
         cfg.watch_folder = Path(raw["watch_folder"]).expanduser()
+        if not cfg.watch_folder.is_absolute():
+            cfg.watch_folder = (config_dir / cfg.watch_folder).resolve()
 
     # Nested configs
     if "folders" in raw:

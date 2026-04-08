@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "obsrag"
+version = "0.1.0"
+description = "Turn handwritten PDFs into linked Obsidian notes with OCR and retrieval."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [
+  { name = "Aidan Wu" }
+]
+dependencies = [
+  "click>=8.1,<9",
+  "PyYAML>=6,<7",
+  "python-dotenv>=1.0,<2",
+  "openai>=1.30,<2",
+  "llama-index>=0.12,<0.13",
+  "llama-index-readers-obsidian>=0.3,<0.4",
+  "llama-index-embeddings-openai>=0.3,<0.4",
+  "pdf2image>=1.17,<2",
+  "Pillow>=10,<12",
+  "sentence-transformers>=3,<4",
+]
+
+[project.optional-dependencies]
+api = [
+  "fastapi>=0.110,<1",
+  "uvicorn>=0.29,<1",
+  "python-multipart>=0.0.9,<1",
+]
+
+[project.scripts]
+obsrag = "cli:main"
+
+[tool.setuptools]
+packages = ["obsrag", "obsrag.ocr", "obsrag.rag"]
+py-modules = ["cli", "api"]
