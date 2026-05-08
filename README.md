@@ -2,11 +2,6 @@
 
 Obsidian RAG turns handwritten PDFs into fully formatted, interlinked Markdown notes in your Obsidian vault.
 
-The current public release is intentionally narrow:
-- OCR provider: OpenAI vision only
-- Auth model: bring your own `OPENAI_API_KEY`
-- Primary use case: local personal workflows on macOS or Linux
-
 The pipeline has four stages:
 - OCR renders each PDF page to an image and sends it to an OpenAI vision model to transcribe handwriting, preserve math as LaTeX, and insert diagram placeholders.
 - Retrieval searches a vector index of your existing Obsidian notes using LlamaIndex and reranks results with a cross-encoder.
